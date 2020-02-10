@@ -1,5 +1,4 @@
 
-
 function p = significance_test(results_struct, n_iter, test_type)
 %% find the significance of decoding accuracy
 % takes in the results struct from folding wrappers and performs a
@@ -14,11 +13,14 @@ end
 
 
 if isfield(results_struct, 'accuracy_matrix')       
-    results_struct_participant_accuracy = [];
-    for sub = 1:results_struct.incl_subj
-        results_struct_participant_accuracy = [results_struct_participant_accuracy nanmean(nanmean(results_struct.accuracy_matrix(:,:,sub)))];
+    results_struct_accuracy = results_struct.accuracy_matrix;
+        
+    % we do this loop because within subjects and participant level
+    % have a different amount of dimensions in their accuracy matrix
+    for mean_dim = 1:ndims(results_struct.accuracy_matrix)
+        results_struct_accuracy = nanmean(results_struct_accuracy, mean_dim);
     end
-    result_struct_accuracy = mean(results_struct_participant_accuracy);
+   
 else
     result_struct_accuracy = mean([mean(results_struct.accuracy(1).subsetXsubj) mean(results_struct.accuracy(2).subsetXsubj)]);
 end
@@ -28,19 +30,20 @@ end
 %% find accuracy distribution
 iter_accuracy = [];
 for iter = 1:n_iter
-    
+    fprintf('Performing iteration %g \n', iter);
     % do classification
     iter_results = test_type(results_struct);
     
     % get classification accuracy 
-    if length(results_struct.conditions) == 2 % if we gave two conditions
-        accuracy = mean([mean(iter_results.accuracy(1).subsetXsubj) mean(iter_results.accuracy(2).subsetXsubj)]);
-    else % if we have more than 2 conditions (will have results matrix rather than vector)
-        participant_accuracy = [];
-        for sub = 1:results_struct.incl_subj
-            participant_accuracy = [participant_accuracy nanmean(nanmean(iter_results.accuracy_matrix(:,:,sub)))];
+    if isfield(iter_results, 'accuracy_matrix')
+        accuracy = iter_results.accuracy_matrix;
+        
+        for mean_dim = 1:ndims(results_struct.accuracy_matrix)
+            accuracy = nanmean(accuracy, mean_dim);
         end
-        accuracy = mean(participant_accuracy);
+        
+    else 
+        accuracy = mean([mean(iter_results.accuracy(1).subsetXsubj) mean(iter_results.accuracy(2).subsetXsubj)]);     
     end
     
     iter_accuracy = [iter_accuracy accuracy];
@@ -50,9 +53,9 @@ end
 %% calculate p
 
 if n_iter == factorial(length(results_struct.conditions))
-    p = sum(iter_accuracy >= result_struct_accuracy)/n_iter;
+    p = sum(iter_accuracy >= results_struct_accuracy)/n_iter;
 else
-    p = (sum(iter_accuracy >= result_struct_accuracy) + 1)/(n_iter + 1);
+    p = (sum(iter_accuracy >= results_struct_accuracy) + 1)/(n_iter + 1);
 end
 
 
