@@ -1,4 +1,4 @@
-function allsubj_results = nfold_classify_ParticipantLevel_permutationTest(results_struct)
+function allsubj_results = permute_nfold_classify_ParticipantLevel(results_struct)
 %% nfold_classify_ParticipantLevel_permutationTest takes a results struct and performs
 % n-fold cross-validation for n subjects to classify individual
 % participants' average response patterns, but with permuted labels. 
@@ -10,7 +10,7 @@ function allsubj_results = nfold_classify_ParticipantLevel_permutationTest(resul
 
 
 %% Prep some basic parameters
-n_subj = length(results_struct.incl_subj);
+n_subj = length(results_struct.incl_subjects);
 n_sets = size(results_struct.subsets,1);
 n_feature = length(results_struct.incl_features);
 try n_cond = length(unique(results_struct.conditions)); catch, n_cond = length(results_struct.conditions); end
@@ -18,8 +18,9 @@ try n_cond = length(unique(results_struct.conditions)); catch, n_cond = length(r
 
 %% Begin the n-fold process: Select one test subj at a time from MCPA struct
 for s_idx = 1:n_subj
-    if p.Results.verbose
+    if results_struct.verbose
         fprintf('Running %g feature subsets for Subject %g / %g',n_sets,s_idx,n_subj);
+        fprintf('\n');
     end
     tic;
     
@@ -66,7 +67,7 @@ for s_idx = 1:n_subj
         % labels.
         
         % RSA
-        if strcmp(func2str(p.Results.test_handle),'pairwise_rsa_test')
+        if strcmp(func2str(results_struct.test_handle),'rsa_classify')
             [test_labels, comparisons] = results_struct.test_handle(...
                 group_data(:,set_features,:), ...
                 group_labels,...
@@ -85,7 +86,7 @@ for s_idx = 1:n_subj
 
         %% Record results 
         if size(test_labels,2) > 1 % test labels will be a column vector if we don't do pairwise
-            if s_idx==1 && set_idx == 1, allsubj_results.accuracy_matrix = nan(n_cond,n_cond,min(n_sets,p.Results.max_sets),n_subj); end
+            if s_idx==1 && set_idx == 1, allsubj_results.accuracy_matrix = nan(n_cond,n_cond,min(n_sets,results_struct.max_sets),n_subj); end
 
             if iscell(comparisons)
                 subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
@@ -105,7 +106,7 @@ for s_idx = 1:n_subj
             for cond_idx = 1:n_cond
                 temp_acc = cellfun(@strcmp,...
                 subj_labels(strcmp(strjoin(string(p.Results.conditions{cond_idx}),'+'),subj_labels)),... % known labels
-                temp_test_labels(strcmp(strjoin(string(p.Results.conditions{cond_idx}),'+'),subj_labels))...% classifier labels
+                test_labels(strcmp(strjoin(string(p.Results.conditions{cond_idx}),'+'),subj_labels))...% classifier labels
                 );
 
                 temp_set_results_cond(cond_idx,set_idx,set_features) = nanmean(temp_acc);
