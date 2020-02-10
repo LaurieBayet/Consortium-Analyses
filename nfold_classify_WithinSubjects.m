@@ -147,23 +147,31 @@ n_sessions = s(end-1);
 try n_cond = length(unique(p.Results.conditions)); catch, n_cond = length(p.Results.conditions); end
 
 %% Set up the results structure which includes a copy of MCPA_pattern
-allsubj_results = create_results_struct(true,...
+allsubj_results = create_results_struct(false,...
     mcpa_summ,...
     p,...
     sets,...
     n_subj,...
     n_sets,...
     n_feature,...
-    n_cond);
+    n_cond,...
+    final_dimensions);
                                           
 
 stack = dbstack;
 current_folding_function = stack.name;
 allsubj_results.test_type = current_folding_function;
 
+if ~isfield(p.Results, 'test_percent') || ~isempty(p.Results.test_percent)
+    allsubj_results.test_percent = .2;
+end
+
 %% now begin the fold
 
-for s_idx = 1:n_subj
+% record how many folds each subject had for the results struct
+number_subject_folds = [];
+
+for s_idx = 1:length(MCP_struct)
     
     if p.Results.verbose
         fprintf('Running %g feature subsets for Subject %g / %g \n',n_sets,s_idx,n_subj);
@@ -199,6 +207,8 @@ for s_idx = 1:n_subj
         num_folds = length(MCP_struct(s_idx).Experiment.Runs);
         one_session = false;
     end
+    
+    number_subject_folds = [number_subject_folds; num_folds];
     
     for folding_idx = 1:num_folds
         %% Run over feature subsets
@@ -306,9 +316,12 @@ for s_idx = 1:n_subj
     end % end session loop
     
 end % end subject loop
-
+allsubj_results.number_subject_folds = number_subject_folds;
 
 end % end function
+            
+
+            
             
 
             
