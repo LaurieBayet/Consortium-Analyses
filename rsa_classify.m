@@ -11,8 +11,8 @@ function [classification, comparisons] = rsa_classify(model_data, model_labels, 
 %
 % If opts.tiebreak is set to true (default), the correlation coefficients
 % are randomly adjusted by <1% of the smallest observed difference to
-% prevent exact matches and thus prevent ties in the classification. If 
-% opts.tiebreak is set to false, the classifier will prefer classes 
+% prevent exact matches and thus prevent ties in the classification. If
+% opts.tiebreak is set to false, the classifier will prefer classes
 % appearing earlier in the training set.
 %
 % If opts.verbose is set to true (default is false), Fisher-adjusted
@@ -24,6 +24,7 @@ function [classification, comparisons] = rsa_classify(model_data, model_labels, 
 %% If the options struct is not provided, set default parameters
 if ~exist('opts','var') || isempty(opts)
     opts = struct;
+    opts.similarity_space = 'corr';
     opts.corr_stat = 'spearman';
     opts.exclusive = true;
     opts.pairwise = false;
@@ -31,13 +32,22 @@ if ~exist('opts','var') || isempty(opts)
     opts.verbose = 0;
 end
 
-if ~isfield(opts, 'corr_stat')
-    opts.corr_stat = 'spearman';
-end
-    
-
 % Pull a list of all the unique classes / conditions, preserving order
 model_classes = unique(model_labels(:),'stable');
+
+%% check to see the orders of test and train data - this is to see if they match
+% get number of categories
+
+[~,train_order] = sort(model_labels);
+[~,test_order] = sort(test_labels);
+
+%% sort test data based on the re-ordered data
+test_labs = test_labels(test_order);
+test_dat = test_data(test_order, :,:,:);
+
+model_labs = model_labels(train_order);
+model_dat = model_data(train_order, :,:,:);
+
 
 %% Build similarity structures
 % Transform the model_data into similiarty structures for each session by
@@ -47,40 +57,48 @@ model_classes = unique(model_labels(:),'stable');
 %  iterate through all the layers (3rd dimension) and create
 % correlation matrices
 
-model_correl = nan(size(model_data,1),size(model_data,1),size(model_data,3),size(model_data,4));
-for subject_idx = 1:size(model_data,4)
-    for session_idx = 1:size(model_data,3)
-        model_correl(:,:,session_idx, subject_idx) = atanh(corr(model_data(:,:,session_idx,subject_idx)','rows','pairwise','type',opts.corr_stat));
+if ~isfield(opts, 'similarity_space') || strcmp(opts.similarity_space, 'corr')
+    model_mat = nan(size(model_dat,1),size(model_dat,1),size(model_data,3),size(model_dat,4));
+    for i = 1: (size(model_dat,3)*size(model_dat,4))
+        model_mat(:,:,i) = corr(model_dat(:,:,i)', 'type', opts.corr_stat);
     end
-end
-training_matrix = nanmean(model_correl,3);
-training_matrix = nanmean(training_matrix,4);
-
-
-
-%  iterate through all the layers (3rd dimension) and create
-% correlation matrices
-
-test_correl = nan(size(test_data,1),size(test_data,1),size(test_data,3),size(test_data,4));
-for subject_idx = 1:size(test_data,4)
-    for session_idx = 1:size(test_data,3)
-        test_correl(:,:,session_idx, subject_idx) = atanh(corr(test_data(:,:,session_idx, subject_idx)','rows','pairwise','type',opts.corr_stat));
+    training_matrix = nanmean(model_mat,3);
+    training_matrix = nanmean(training_matrix,4);
+    
+    test_mat = nan(size(test_dat,1),size(test_dat,1),size(test_dat,3),size(test_dat,4));
+    for i = 1: (size(test_dat,3)*size(test_dat,4))
+        test_mat(:,:,i) = corr(test_dat(:,:,i)', 'type', opts.corr_stat);
     end
+    test_matrix = nanmean(test_mat,3);
+    test_matrix = nanmean(test_matrix,4);
+else
+    model_mat = nan(size(model_dat,1),size(model_dat,1),size(model_data,3),size(model_dat,4));
+    for i = 1: (size(model_dat,3)*size(model_dat,4))
+        model_mat(:,:,i) = squareform(pdist(model_dat(:,:,i), opts.distance_metric));
+    end
+    training_matrix = nanmean(model_mat,3);
+    training_matrix = nanmean(training_matrix,4);
+    
+    test_mat = nan(size(test_dat,1),size(test_dat,1),size(test_dat,3),size(test_dat,4));
+    for i = 1: (size(test_dat,3)*size(test_dat,4))
+        test_mat(:,:,i) = squareform(pdist(test_dat(:,:,i), opts.distance_metric));
+    end
+    test_matrix = nanmean(test_mat,3);
+    test_matrix = nanmean(test_matrix,4);
 end
-test_matrix = nanmean(test_correl,3);
-test_matrix = nanmean(test_matrix,4);
+
 
 %% Visualize the matrices
 
 if opts.verbose > 1
-
+    
     plot_idx = 1;
     figure
-    for subject_idx = 1:size(model_data,4)
-        for session_idx = 1:size(model_data,3)
+    for session_idx = 1:size(model_data,3)
+        for subject_idx = 1:size(model_data,4)
             subplot(size(model_data,3),size(model_data,4),plot_idx);
-            imagesc(model_correl(:,:,session_idx, subject_idx))
-            title(['Subject ' num2str(subject_idx) ' Session ' num2str(session_idx)])
+            imagesc(model_mat(:,:,session_idx, subject_idx))
+            title(['Subj ' num2str(subject_idx) ' Sess ' num2str(session_idx)])
             xticklabels([])
             yticklabels([])
             caxis([-.5,.5])
@@ -91,10 +109,10 @@ if opts.verbose > 1
     
     plot_idx = 1;
     figure
-    for subject_idx = 1:size(test_data,4)
-        for session_idx = 1:size(test_data,3)
-            subplot(2,2,plot_idx);
-            imagesc(model_correl(:,:,session_idx, subject_idx))
+    for session_idx = 1:size(test_data,3)
+        for subject_idx = 1:size(test_data,4)
+            subplot(size(test_data,3),size(test_data,4),plot_idx);
+            imagesc(test_mat(:,:,session_idx, subject_idx))
             title(['Subject ' num2str(subject_idx) ' Session ' num2str(session_idx)])
             xticklabels([])
             yticklabels([])
@@ -113,7 +131,9 @@ if opts.verbose
     title('Training Data')
     xticklabels(model_labels)
     yticklabels(model_labels)
-    caxis([min(min(tril(training_matrix,-1))),max(max(tril(training_matrix,-1)))])
+    %caxis([min(min(tril(training_matrix,-1))),max(max(tril(training_matrix,-1)))])
+    caxis([-.5,.5])
+    
     colorbar('hot')
     [i, j, ~] = find(~isnan(training_matrix));
     text(i-.3,j,num2str(round(training_matrix(~isnan(training_matrix)),2)));
@@ -124,16 +144,17 @@ if opts.verbose
     title('Test Data')
     xticklabels(test_labels)
     yticklabels(test_labels)
-    caxis([min(min(tril(test_matrix,-1))),max(max(tril(test_matrix,-1)))])
+    %caxis([min(min(tril(test_matrix,-1))),max(max(tril(test_matrix,-1)))])
+    caxis([-.5,.5])
     colorbar('hot')
     [i, j, ~] = find(~isnan(test_matrix));
     text(i-.3,j,num2str(round(test_matrix(~isnan(test_matrix)),2)));
 end
 
 %% Sanity Check
-if sum(isnan(test_matrix(:)))==numel(test_matrix) || sum(isnan(training_matrix(:)))==numel(training_matrix)
-    error('One or both input matrices contains all NaN values. I quit!');
-end
+% if sum(isnan(test_matrix(:)))==numel(test_matrix) || sum(isnan(training_matrix(:)))==numel(training_matrix)
+%     error('One or both input matrices contains all NaN values. I quit!');
+% end
 
 %% Save out the classification results based on greatest correlation coefficient for each test pattern
 % Initialize empty cell matrix for classifications
@@ -160,13 +181,19 @@ if ~isfield(opts,'pairwise') || ~opts.pairwise
         tmp_test_vec = tmp_test_matrix(logical(tril(ones(size(tmp_test_matrix)),-1)));
         results_of_comparisons(perm_idx) = corr(atanh(train_vec),atanh(tmp_test_vec),'rows','pairwise');
     end
-
+    
     % Choose the best of all the permutations of labels
     [rating, best_perm] = max(results_of_comparisons);
     classification = model_classes(list_of_comparisons(best_perm,:));
     
     %accuracy = strcmp(classification,test_labels);
     comparisons = test_labels';
+    
+    % put the labels back in the order they were put in as
+    [~,reorder_test] = sort(test_order);
+    classification = classification(reorder_test);
+    comparisons = comparisons(reorder_test);
+    
     
 else
     [accuracy, comparisons] = pairwise_rsa_test(test_matrix,training_matrix);
@@ -183,4 +210,7 @@ else
     
     classification = results_of_comparisons;
     
+end
+
+
 end
