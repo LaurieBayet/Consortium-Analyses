@@ -6,7 +6,7 @@ function [classification, comparisons] = knn_classify(train_data, train_labels, 
 
 %% determine if we use pairwise comparisons 
 if ~exist('opts','var') || ~isfield(opts, 'pairwise') || isempty(opts)
-    pairwise = true;
+    pairwise = false;
 else
     pairwise = opts.pairwise;
     opts = rmfield(opts,'pairwise');

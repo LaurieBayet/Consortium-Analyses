@@ -85,8 +85,8 @@ end
 %% step 4: get the class labels for test and train data
 
 % first need to know how many times each label is represented in the data
-train_label_repetitions = size(train_data, 1)/length(unique(event_types));
-test_label_repetitions = size(test_data, 1)/length(unique(event_types));
+train_label_repetitions = size(train_data, 1)/(length(unique(event_types))*(length(event_types(train_cond_flags))/length(unique(event_types(train_cond_flags)))));
+test_label_repetitions = size(test_data, 1)/(length(unique(event_types))*(length(event_types(test_cond_flags))/length(unique(event_types(test_cond_flags)))));
 
 
 % then create vector of labels

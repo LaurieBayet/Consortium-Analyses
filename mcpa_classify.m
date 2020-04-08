@@ -1,4 +1,4 @@
-function [classification rating] = mcpa_classify(model_data, model_labels, test_data, test_labels, opts)
+function [classification, rating] = mcpa_classify(model_data, model_labels, test_data, test_labels, opts)
 %% mcpa_classify implements a correlation-based, channel-space classifier
 % following Emberson, Zinszer, Raizada & Aslin's (2017, PLoS One) method
 % and extending this approach to multiple conditions (>2). The MCPA
@@ -25,20 +25,43 @@ function [classification rating] = mcpa_classify(model_data, model_labels, test_
 % All-possible-pairwise comparison (opts.pairwise) is under development.
 
 %% If the options struct is not provided, set default parameters
-if ~exist('opts','var') || isempty(opts)
+if ~exist('opts','var') || isempty(opts) 
     opts = struct;
+end
+
+if ~isfield(opts, 'corr_stat')
     opts.corr_stat = 'spearman';
+end
+if ~isfield(opts, 'exclusive')
     opts.exclusive = false;
+end
+if ~isfield(opts, 'pairwise')
     opts.pairwise = false;
+end
+if ~isfield(opts, 'tiebreak')
     opts.tiebreak = true;
 end
 
+
 model_classes = unique(model_labels,'stable');
+
+%% check to see the orders of test and train data - this is to see if they match
+% get number of categories
+
+[~,train_order] = sort(model_labels);
+[~,test_order] = sort(test_labels);
+
+%% sort test data based on the re-ordered data
+test_labs = test_labels(test_order);
+test_dat = test_data(test_order, :);
+
+model_labs = model_labels(train_order);
+model_dat = model_data(train_order, :);
 
 %% Average across training data to get model features for each class
 model_patterns = nan(size(model_data,2),length(model_classes));
 for class_idx = 1:length(model_classes)
-    model_patterns(:,class_idx) = nanmean(model_data(strcmp(model_classes{class_idx},model_labels),:),1)';
+    model_patterns(:,class_idx) = nanmean(model_dat(strcmp(model_classes{class_idx},model_labs),:),1)';
 end
 
 %% Perform correlation (default: Pearson) between all model patterns and the test patterns
@@ -48,7 +71,7 @@ end
 % 2. Run correlation over all of them, and get a the matrix of corr coeffs.
 % 3. First column is Model A vs. all others, Second column is Model B vs.
 %	all others, nth column is Model N vs. all others.
-corr_matrix = atanh(corr([model_patterns,test_data'],'type',opts.corr_stat,'rows','pairwise'));
+corr_matrix = atanh(corr([model_patterns,test_dat'],'type',opts.corr_stat,'rows','pairwise'));
 
 % Isolate the columns representing the model_patterns, and the rows
 % representing the test_data to get the correlations for each item
@@ -57,9 +80,9 @@ test_model_corrs = corr_matrix(length(model_classes)+1:end,1:length(model_classe
 
 %% Save out the classification results based on greatest correlation coefficient for each test pattern
 % Initialize empty cell matrix for classifications
-classification = cell(size(test_data,1),1);
+classification = cell(size(test_dat,1),1);
 
-if opts.exclusive && length(model_classes)==size(test_data,1)
+if opts.exclusive && length(model_classes)==size(test_dat,1)
     
     %% Fill in the case for exclusive labels
     % wherein each class can only be assigned to one row of test data
@@ -107,4 +130,7 @@ else
         classification = model_classes(test_class_idx);
         
     end
+    % put the labels back in the order they were put in as
+    [~,reorder_test] = sort(test_order);
+    classification = classification(reorder_test);
 end

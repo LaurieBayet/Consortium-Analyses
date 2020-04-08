@@ -78,10 +78,18 @@ end
 
 %% Build MCPA struct for all subjects in the MCP
 mcpa_struct = MCP_to_MCPA(MCP_struct,...
-                         p.Results.incl_subjects,...
-                         p.Results.incl_features,...
-                         p.Results.time_window,...
-                         p.Results.baseline_window);
+     p.Results.incl_subjects,...
+     p.Results.incl_features,...
+     p.Results.incl_channels,...
+     p.Results.time_window,...
+     p.Results.baseline_window,...
+     p.Results.oxy_or_deoxy);
+ 
+% Subset patterns by session
+inds = repmat({':'},1,ndims(mcpa_struct.patterns)); % Create index structure with all-elements in all-dimensions
+inds{strcmp(mcpa_struct.dimensions,'session')} = p.Results.incl_sessions; % In whichever dimension matches 'session', substitute the incl_sessions vector
+mcpa_struct.patterns = mcpa_struct.patterns(inds{:}); % Replace patterns matrix with the subsetted sessions data
+
                      
 %% summarize MCPA struct
 % Step 2: Apply the desired function (e.g., @nanmean) for summarizing time
@@ -285,9 +293,14 @@ for s_idx = 1:length(MCP_struct)
 
                     if iscell(comparisons)
                         subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
+                        nan_idx = cellfun(@(x) any(isnan(x)), test_labels(:,1,:), 'UniformOutput', false);
+                        subj_acc(:,:,[nan_idx{1,:,:}]) = nan;
+                
                         comparisons = cellfun(@(x) find(strcmp(x,mcpa_summ.event_types)),comparisons); 
                     else
                         subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
+                        nan_idx = cellfun(@(x) any(isnan(x)), test_labels(:,1,:), 'UniformOutput', false);
+                        subj_acc(:,:,[nan_idx{1,:,:}]) = nan;  
                     end
 
                     for comp = 1:size(comparisons,1)
@@ -312,6 +325,7 @@ for s_idx = 1:length(MCP_struct)
                         allsubj_results.accuracy(cond_idx).subjXsession(s_idx,folding_idx) = nanmean(temp_set_results_cond(cond_idx,:,:),3);
                     end
                 end
+                
                 
             end % end set_idx
     %% Progress reporting

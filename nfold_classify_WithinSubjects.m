@@ -78,11 +78,18 @@ end
 
 %% Build MCPA struct for all subjects in the MCP
 mcpa_struct = MCP_to_MCPA(MCP_struct,...
-                         p.Results.incl_subjects,...
-                         p.Results.incl_features,...
-                         p.Results.time_window,...
-                         p.Results.baseline_window);
-                     
+     p.Results.incl_subjects,...
+     p.Results.incl_features,...
+     p.Results.incl_channels,...
+     p.Results.time_window,...
+     p.Results.baseline_window,...
+     p.Results.oxy_or_deoxy);
+
+% Subset patterns by session
+inds = repmat({':'},1,ndims(mcpa_struct.patterns)); % Create index structure with all-elements in all-dimensions
+inds{strcmp(mcpa_struct.dimensions,'session')} = p.Results.incl_sessions; % In whichever dimension matches 'session', substitute the incl_sessions vector
+mcpa_struct.patterns = mcpa_struct.patterns(inds{:}); % Replace patterns matrix with the subsetted sessions data
+
 %% summarize MCPA struct
 % Step 2: Apply the desired function (e.g., @nanmean) for summarizing time
 % window data. You can write custom functions to deal with time- and
@@ -162,16 +169,9 @@ stack = dbstack;
 current_folding_function = stack.name;
 allsubj_results.test_type = current_folding_function;
 
-if ~isfield(p.Results, 'test_percent') || ~isempty(p.Results.test_percent)
-    allsubj_results.test_percent = .2;
-end
-
 %% now begin the fold
 
-% record how many folds each subject had for the results struct
-number_subject_folds = [];
-
-for s_idx = 1:length(MCP_struct)
+for s_idx = 1:n_subj
     
     if p.Results.verbose
         fprintf('Running %g feature subsets for Subject %g / %g \n',n_sets,s_idx,n_subj);
@@ -207,8 +207,6 @@ for s_idx = 1:length(MCP_struct)
         num_folds = length(MCP_struct(s_idx).Experiment.Runs);
         one_session = false;
     end
-    
-    number_subject_folds = [number_subject_folds; num_folds];
     
     for folding_idx = 1:num_folds
         %% Run over feature subsets
@@ -316,12 +314,9 @@ for s_idx = 1:length(MCP_struct)
     end % end session loop
     
 end % end subject loop
-allsubj_results.number_subject_folds = number_subject_folds;
+
 
 end % end function
-            
-
-            
             
 
             

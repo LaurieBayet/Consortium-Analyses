@@ -66,8 +66,15 @@ end
 mcpa_struct = MCP_to_MCPA(MCP_struct,...
     p.Results.incl_subjects,...
     p.Results.incl_features,...
+    p.Results.incl_channels,...
     p.Results.time_window,...
-    p.Results.baseline_window);
+    p.Results.baseline_window,...
+    p.Results.oxy_or_deoxy);
+
+% Subset patterns by session
+inds = repmat({':'},1,ndims(mcpa_struct.patterns)); % Create index structure with all-elements in all-dimensions
+inds{strcmp(mcpa_struct.dimensions,'session')} = p.Results.incl_sessions; % In whichever dimension matches 'session', substitute the incl_sessions vector
+mcpa_struct.patterns = mcpa_struct.patterns(inds{:}); % Replace patterns matrix with the subsetted sessions data
 
 %% first decide how we want to concatenate or average over our dimensions
 % intermediary step: see if the user specified the summarizing dimensions. If not,
@@ -226,9 +233,14 @@ for s_idx = 1:length(mcpa_summ.incl_subjects)
 
             if iscell(comparisons)
                 subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
-                comparisons = cellfun(@(x) find(strcmp(x,mcpa_summ.event_types)),comparisons);
-            else  
+                nan_idx = cellfun(@(x) any(isnan(x)), test_labels(:,1,:), 'UniformOutput', false);
+                subj_acc(:,:,[nan_idx{1,:,:}]) = nan;
+
+                comparisons = cellfun(@(x) find(strcmp(x,mcpa_summ.event_types)),comparisons); 
+            else
                 subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
+                nan_idx = cellfun(@(x) any(isnan(x)), test_labels(:,1,:), 'UniformOutput', false);
+                subj_acc(:,:,[nan_idx{1,:,:}]) = nan;  
             end
 
             for comp = 1:size(comparisons,1)

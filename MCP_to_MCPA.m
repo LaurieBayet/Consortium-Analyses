@@ -1,4 +1,4 @@
-function MCPA_struct = MCP_to_MCPA(mcp_multiple, incl_subjects, incl_features, time_window, baseline_window)
+function MCPA_struct = MCP_to_MCPA(mcp_multiple, incl_subjects, incl_features, incl_channels, time_window, baseline_window, oxy_or_deoxy)
 %MCP_TO_MCPA Convert MCP format data to MCPA_struct for analysis
 % The function is called with the following arguments:
 % MCP_to_MCPA(mcp_struct, incl_subjects, incl_features, time_window)
@@ -57,7 +57,7 @@ if ~exist('incl_subjects','var') || isempty(incl_subjects)
     incl_subjects = 1:length(mcp_multiple);
 end
 if ~exist('incl_features','var') || isempty(incl_features)
-    incl_features = [1:max(arrayfun(@(x) size(x.fNIRS_Data.Hb_data.Oxy,2),mcp_multiple))];
+    incl_features = [1:max(arrayfun(@(x) size(x.fNIRS_Data.Hb_data.(oxy_or_deoxy),2),mcp_multiple))];
 end
 if ~exist('time_window','var') || isempty(time_window)
     time_window = [0,20];
@@ -85,12 +85,12 @@ end
 max_num_sessions = max(num_sessions);
 
 %% get the amount of repetitions for a category type
-startidx = arrayfun(@(x) arrayfun(@(s) min(s.Index), x.Experiment.Runs),mcp_multiple, 'UniformOutput', false);
-stopidx = arrayfun(@(x) arrayfun(@(s) max(s.Index), x.Experiment.Runs),mcp_multiple, 'UniformOutput', false);
+startidx = arrayfun(@(x) arrayfun(@(s) min(s.Index), x.Experiment.Runs, 'UniformOutput', false),mcp_multiple, 'UniformOutput', false);
+stopidx = arrayfun(@(x) arrayfun(@(s) max(s.Index), x.Experiment.Runs, 'UniformOutput', false),mcp_multiple, 'UniformOutput', false);
 num_events = nan(length(mcp_multiple), max_num_sessions);
 for subj = 1:length(mcp_multiple)
     for session = 1:length(mcp_multiple(subj).Experiment.Runs)
-       num_events(subj,session) = max(sum(mcp_multiple(subj).fNIRS_Data.Onsets_Matrix(startidx{subj}(session):stopidx{subj}(session),:))); 
+       num_events(session,subj) = max(sum(mcp_multiple(subj).fNIRS_Data.Onsets_Matrix(startidx{subj}{session}:stopidx{subj}{session},:))); 
     end
 end
 num_repetitions = max(num_events,[],'all');
@@ -110,7 +110,6 @@ unique_names = cellfun(@(x) char(x{:}),all_names,'UniformOutput',false);
 % Initiate the subj_mat matrix that will be output later(begin with NaN)
 % Output matrix for MCPA_struct is in dimension: time_window x types x features x repetition x subjects
 subj_mat = nan(num_time_samps, length(event_types), length(incl_features), num_repetitions, max_num_sessions, length(incl_subjects));
-
 % Extract data from each subject
 for subj_idx = 1 : length(incl_subjects)
     
@@ -121,9 +120,10 @@ for subj_idx = 1 : length(incl_subjects)
 
         % Event_matrix format:
         % (time x features x repetition x types)
-        event_matrix = MCP_get_subject_events(mcp_multiple(incl_subjects(subj_idx)), incl_features, time_window, event_types, baseline_window, session_idx);
+        event_matrix = MCP_get_subject_events(mcp_multiple(incl_subjects(subj_idx)), incl_features, incl_channels, time_window, event_types, baseline_window, oxy_or_deoxy, session_idx);
         event_matrix = permute(event_matrix, [1 4 2 3]);
 
+       
         subj_time_samps = size(event_matrix,1);
         if subj_time_samps == num_time_samps
             repetitions_in_session = size(event_matrix,4);
@@ -133,8 +133,9 @@ for subj_idx = 1 : length(incl_subjects)
             time_mask = round(linspace(1,num_time_samps,subj_time_samps));
             % Output format: subj_mat(time_window x event_types x features x repetition x subjects)
             subj_mat(time_mask, :, :,1:repetitions_in_session, session_idx, subj_idx) = event_matrix;
-
         end
+
+        
     end
     
 end

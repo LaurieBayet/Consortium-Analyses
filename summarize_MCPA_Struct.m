@@ -71,7 +71,6 @@ for curr_dim = 1:length(summarize_dimensions)
         end
     end
 end
-dimension_labels = dimension_labels(~cellfun('isempty',dimension_labels));
 
 if ~isempty(strcmp('session', dimension_labels))
     session_idx = find(strcmp('session', dimension_labels));
@@ -83,7 +82,9 @@ if ~isempty(strcmp('session', dimension_labels))
     else
         summarized_MCPA_struct_pattern = squeeze(pattern_matrix);
     end
-end       
+end    
+
+dimension_labels = dimension_labels(~cellfun('isempty',dimension_labels));
 
 %% Return the new struct
 try

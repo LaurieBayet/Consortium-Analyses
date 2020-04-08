@@ -1,4 +1,4 @@
-function [event_matrix] = MCP_get_subject_events(mcp_struct, features, time_window, event_types, base_window, session_index)
+function [event_matrix] = MCP_get_subject_events(mcp_struct, features, channels, time_window, event_types, base_window, oxy_or_deoxy, session_index)
 
 %MCP_GET_SUBJECT_EVENTS Returns a matrix that contains HbO data for target 
 %subject in each type, feature, time, and type repetition.
@@ -23,10 +23,12 @@ end
 % subject), then the function will call itself and re-evaluate on the
 % contents of each struct, returning event_matrix in a separate cell for
 % each element in the struct (i.e., a cell for each subject).
+
+% is this a problem for the transformation matrix???
 if length(mcp_struct)>1
     event_matrix = cell(length(mcp_struct),1);
     for subj_num = 1:length(mcp_struct)
-        event_matrix{subj_num} = MCP_get_subject_events(mcp_struct(subj_num), features, time_window, event_types);
+        event_matrix{subj_num} = MCP_get_subject_events(mcp_struct(subj_num), features, channels, time_window, event_types, base_window, oxy_or_deoxy, session_index);
     end
     return
 end
@@ -35,7 +37,25 @@ end
 % find the location of hemoglobin data for this session
 session_locs = mcp_struct.Experiment.Runs(session_index).Index';
 % Extract hemoglobin data and marks from the MCP struct
-hemo_timeser = mcp_struct.fNIRS_Data.Hb_data.Oxy(session_locs, features);
+hemo_timeser = mcp_struct.fNIRS_Data.Hb_data.(oxy_or_deoxy)(session_locs, channels);
+
+% Extract the transformation matrix and if its converting to ROI space,
+% weight it
+if size(mcp_struct.Experiment.Runs(session_index).Transformation_Matrix,1) == size(mcp_struct.Experiment.Runs(session_index).Transformation_Matrix,2)
+    % if we're using the identity matix, then we can just take the original transformation matrix
+    transformation_mat = mcp_struct.Experiment.Runs(session_index).Transformation_Matrix(channels, channels);
+else
+    % if its converting into Brodmann's areas, then we first need to
+    % extract the transformation matrix
+    transformation_mat = mcp_struct.Experiment.Runs(session_index).Transformation_Matrix(channels,features);
+    % then we need to weight it so that each area sums to 1
+    weight = sum(transformation_mat,1);
+    transformation_mat = transformation_mat ./ weight;
+end
+
+% transform the hemodynamic timeseries
+hemo_timeser = hemo_timeser * transformation_mat;
+
 marks_vec = mcp_struct.fNIRS_Data.Onsets_Matrix(session_locs,:);
 
 % Handle different type of marks vector
@@ -85,7 +105,7 @@ base_window_samp = round(base_window.*Fs_val); % converting time (s) to number o
 
 % The output matrix setup(time x features x type repetition x types)
 num_samps = max(time_window_samp) - min(time_window_samp) + 1;
-event_matrix = nan(num_samps, length(features), size(marks_mat, 1), length(event_types));
+event_matrix = nan(num_samps, size(hemo_timeser,2), size(marks_mat, 1), length(event_types));
 %%
 for type_i = 1 : length(event_types)
     
