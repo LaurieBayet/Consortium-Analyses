@@ -13,10 +13,10 @@ function [results_of_comparisons, list_of_comparisons] = pairwise_rsa_test(test_
 %   [ ACC, COMP ] = PAIRWISE_RSA_TEST( M1, M2 )
 
 %% Sanity Check
-if sum(isnan(test_matrix(:)))==numel(test_matrix) || sum(isnan(training_matrix(:)))==numel(training_matrix)
-    disp('\nOne or both input matrices contains all NaN values. I quit!');
-    return
-end
+% if sum(isnan(test_matrix(:)))==numel(test_matrix) || sum(isnan(training_matrix(:)))==numel(training_matrix)
+%     disp('\nOne or both input matrices contains all NaN values. I quit!');
+%     return
+% end
 
 %% Prep some basic values
 
@@ -53,7 +53,9 @@ for this_comp = 1:number_of_comparisons
     
     % Test the accuracy, whether correct label correlations were greater
     % than the incorrect label correlations
-    if correct_labels == incorrect_labels
+    if isnan(correct_labels) || isnan(incorrect_labels)
+        results_of_comparisons(this_comp) = nan;
+    elseif correct_labels == incorrect_labels
         % When the results are equal, choose one at random.
         % This condition should almost never be met unless trying to
         % analyze a 4x4 (all corrs will be 1 or -1), but it is necessary to
