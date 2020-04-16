@@ -74,8 +74,15 @@ end
 mcpa_struct = MCP_to_MCPA(MCP_struct,...
     p.Results.incl_subjects,...
     p.Results.incl_features,...
+    p.Results.incl_channels,...
     p.Results.time_window,...
-    p.Results.baseline_window);
+    p.Results.baseline_window,...
+    p.Results.oxy_or_deoxy);
+
+% Subset patterns by session
+inds = repmat({':'},1,ndims(mcpa_struct.patterns));
+inds{strcmp(mcpa_struct.dimensions,'session')} = p.Results.incl_sessions;
+mcpa_struct.patterns = mcpa_struct.patterns(inds{:});
 
 %% summarize MCPA struct
 % Step 2: Apply the desired function (e.g., @nanmean) for summarizing time
@@ -109,7 +116,7 @@ else
     warning('final_dimensions not specified. Consulting recommend_dimensions.')
     
     [~, final_dimensions] = recommend_dimensions(p.Results, isWithinSubjects);
-   
+    
     fprintf('The format the data will be in when it enters the classifier wrapper is: %s', final_dimensions{:});
     fprintf('\n')
 end
@@ -164,7 +171,7 @@ allsubj_results.test_marks = p.Results.test_marks;
 
 % This renames the conditions for the accuracy field - currently create_results_struct operates as
 % though we're using all the conditions so it labels the accuracy fields as
-% baby 1, baby 2, etc. when we really want baby, bottle, etc. 
+% baby 1, baby 2, etc. when we really want baby, bottle, etc.
 for group_id = 1:n_group
     allsubj_results.accuracy(group_id).condition = allsubj_results.groups(group_id);
 end
@@ -176,7 +183,7 @@ for s_idx = 1:n_subj
         fprintf('Running %g feature subsets for Subject %g / %g',n_sets,s_idx,n_subj);
     end
     tic
-   
+    
     %% Run over feature subsets
     temp_set_results_cond = nan(n_group,n_sets,n_feature);
     
@@ -194,8 +201,8 @@ for s_idx = 1:n_subj
         mcpa_summ.test_events = cellfun(@(x) any(strcmp(x,p.Results.test_marks)),mcpa_summ.event_types);
         mcpa_summ.train_events = cellfun(@(x) all(~strcmp(x,p.Results.test_marks)),mcpa_summ.event_types);
     end
-
-
+    
+    
     %% Folding & Dispatcher: Here's the important part
     % Right now, the data have to be treated differently for 2
     % conditions vs. many conditions. In MCPA this is because 2
@@ -214,82 +221,85 @@ for s_idx = 1:n_subj
         mcpa_summ.dimensions,...
         mcpa_summ.test_events,...
         mcpa_summ.train_events);
-
+    
     for set_idx = 1:n_sets
-            %% Progress reporting bit (not important to function. just sanity)
-            % Report at every 5% progress
-            if p.Results.verbose
-                status_jump = floor(n_sets/20);
-                if ~mod(set_idx,status_jump)
-                    fprintf(' .')
-                end
+        %% Progress reporting bit (not important to function. just sanity)
+        % Report at every 5% progress
+        if p.Results.verbose
+            status_jump = floor(n_sets/20);
+            if ~mod(set_idx,status_jump)
+                fprintf(' .')
             end
-            % Select the features for this subset
-            set_features = sets(set_idx,:); 
+        end
+        % Select the features for this subset
+        set_features = sets(set_idx,:);
+        
+        %% classify
+        % call differently based on if we do RSA or not
+        % if we do pairwise comparison, the result test_labels will be a 3d
+        % matrix with the dimensions: predicted label x correct label x
+        % index of comparison. The output 'comparisons' will be the
+        % conditions that were compared and can either be a 2d cell array or a
+        % matrix of integers. If we don't do pairwise comparisons, the
+        % output 'test_labels' will be a 1d cell array of predicted labels.
+        % The output 'comparisons' will be a 1d array of the correct
+        % labels.
+        
+        % RSA
+        if strcmp(func2str(p.Results.test_handle),'rsa_classify')
+            [test_labels, comparisons] = p.Results.test_handle(...
+                group_data(:,set_features,:,:), ...
+                group_labels,...
+                subj_data(:,set_features,:),...
+                subj_labels,...
+                p.Results.opts_struct);
             
-            %% classify
-            % call differently based on if we do RSA or not
-            % if we do pairwise comparison, the result test_labels will be a 3d
-            % matrix with the dimensions: predicted label x correct label x
-            % index of comparison. The output 'comparisons' will be the
-            % conditions that were compared and can either be a 2d cell array or a
-            % matrix of integers. If we don't do pairwise comparisons, the
-            % output 'test_labels' will be a 1d cell array of predicted labels.
-            % The output 'comparisons' will be a 1d array of the correct
-            % labels.
+        else
+%             if any(strcmp('incl_sessions',varargin))
+%                 error('incl_sessions parameter not available for non-rsa classifiers at this moment.');
+%             end
+            [test_labels, comparisons] = p.Results.test_handle(...
+                group_data(:,set_features), ...
+                group_labels,...
+                subj_data(:,set_features),...
+                subj_labels,...
+                p.Results.opts_struct);
+        end
+        
+        %% Compare the labels output by the classifier to the known labels
+        if size(test_labels,2) > 1 % test labels will be a column vector if we don't do pairwise
             
-            % RSA
-            if strcmp(func2str(p.Results.test_handle),'rsa_classify')
-                [test_labels, comparisons] = p.Results.test_handle(...
-                    group_data(:,set_features,:), ...
-                    group_labels,...
-                    subj_data(:,set_features,:),...
-                    subj_labels,...
-                    p.Results.opts_struct);
-
+            if s_idx==1 && set_idx == 1, allsubj_results.accuracy_matrix = nan(n_cond,n_cond,min(n_sets,p.Results.max_sets),n_subj); end
+            
+            if iscell(comparisons)
+                subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
+                comparisons = cellfun(@(x) find(strcmp(x,unique(mcpa_summ.event_groups))),comparisons);
             else
-                [test_labels, comparisons] = p.Results.test_handle(...
-                    group_data(:,set_features), ...
-                    group_labels,...
-                    subj_data(:,set_features),...
-                    subj_labels,...
-                    p.Results.opts_struct);
+                subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
             end
             
-            %% Compare the labels output by the classifier to the known labels
-            if size(test_labels,2) > 1 % test labels will be a column vector if we don't do pairwise
-            
-                if s_idx==1 && set_idx == 1, allsubj_results.accuracy_matrix = nan(n_cond,n_cond,min(n_sets,p.Results.max_sets),n_subj); end
-                
-                if iscell(comparisons)
-                    subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
-                    comparisons = cellfun(@(x) find(strcmp(x,unique(mcpa_summ.event_groups))),comparisons);
+            for comp = 1:size(comparisons,1)
+                if size(comparisons,2)==1
+                    allsubj_results.accuracy_matrix(comparisons(comp,1),:,set_idx,s_idx) = subj_acc(comp);
                 else
-                    subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
-                end
-                
-                for comp = 1:size(comparisons,1)
-                    if size(comparisons,2)==1
-                        allsubj_results.accuracy_matrix(comparisons(comp,1),:,set_idx,s_idx) = subj_acc(comp);
-                    else
-                        allsubj_results.accuracy_matrix(comparisons(comp,1),comparisons(comp,2),set_idx,s_idx) = subj_acc(comp);
-                    end
-                end    
-                
-            else                
-                for group_idx = 1:n_group
-                    temp_acc = cellfun(@strcmp,...
-                        subj_labels(strcmp(string(groups{group_idx}),subj_labels)),... % known labels
-                        test_labels(strcmp(string(groups{group_idx}),subj_labels))...% classifier labels
-                        );
-
-                    temp_set_results_cond(group_idx,set_idx,set_features) = nanmean(temp_acc);
-                end
-                for group_idx = 1:n_group
-                    allsubj_results.accuracy(group_idx).subsetXsubj(:,s_idx) = nanmean(temp_set_results_cond(group_idx,:,:),3);
-                    allsubj_results.accuracy(group_idx).subjXfeature(s_idx,:) = nanmean(temp_set_results_cond(group_idx,:,:),2);
+                    allsubj_results.accuracy_matrix(comparisons(comp,1),comparisons(comp,2),set_idx,s_idx) = subj_acc(comp);
                 end
             end
+            
+        else
+            for group_idx = 1:n_group
+                temp_acc = cellfun(@strcmp,...
+                    subj_labels(strcmp(string(groups{group_idx}),subj_labels)),... % known labels
+                    test_labels(strcmp(string(groups{group_idx}),subj_labels))...% classifier labels
+                    );
+                
+                temp_set_results_cond(group_idx,set_idx,set_features) = nanmean(temp_acc);
+            end
+            for group_idx = 1:n_group
+                allsubj_results.accuracy(group_idx).subsetXsubj(:,s_idx) = nanmean(temp_set_results_cond(group_idx,:,:),3);
+                allsubj_results.accuracy(group_idx).subjXfeature(s_idx,:) = nanmean(temp_set_results_cond(group_idx,:,:),2);
+            end
+        end
         
     end %set_idx loop
     %% Progress reporting

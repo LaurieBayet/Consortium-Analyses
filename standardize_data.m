@@ -7,6 +7,11 @@ function [group_dat, subject_dat] = standardize_data(group, subject)
 average = mean(group);
 sd = std(group);
 group_dat = (group-average) ./ sd;
-subject_dat = (subject - average) ./ sd;
+
+if ~isstruct(subject)
+    subject_dat = (subject - average) ./ sd;
+else
+    subject_dat = nan;
+end
 
 end

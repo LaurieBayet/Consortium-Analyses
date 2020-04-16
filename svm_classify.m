@@ -8,10 +8,14 @@ function [classification, comparisons] = svm_classify(train_data, train_labels, 
 
 %% determine if we use pairwise comparisons 
 if ~exist('opts','var') || ~isfield(opts, 'pairwise') || isempty(opts)
-    opts.pairwise = false;
+    pairwise = false;
 else
     pairwise = opts.pairwise;
     opts = rmfield(opts,'pairwise');
+end
+
+if ~exist('pairwise','var')
+    pairwise = false;
 end
 
 %% parse out the classification parameters
@@ -20,12 +24,12 @@ input = parse_opts(opts);
 %% if pairwise classification
 if pairwise
     
-    % set up some parameters for our compairison loop
     number_classes = length(unique(train_labels));
     class_names = unique(train_labels);
+    class_count = sum(strcmp(test_labels, class_names{1}));
     list_of_comparisons = combnk([1:number_classes],2);
     number_of_comparisons = size(list_of_comparisons,1);
-    results_of_comparisons = nan(number_of_comparisons,1);
+    results_of_comparisons = cell((class_count*2), 2, number_of_comparisons);
     
     for this_comp = 1:number_of_comparisons
         
@@ -45,12 +49,14 @@ if pairwise
         % select just the rows of the test data and labels that we will
         % need for this comparison
         test_dat = [test_data(strcmp(test_labels,test_class_names(1)),:);...
-                    test_labels(strcmp(test_labels,test_class_names(2)),:)];
+                    test_data(strcmp(test_labels,test_class_names(2)),:)];
         test_labs = [test_labels(strcmp(test_labels,test_class_names(1)));...
                      test_labels(strcmp(test_labels,test_class_names(2)))];
         
         t = templateSVM(input{:});
         svm_model = fitcecoc(train_dat, train_labs,'Learners', t);
+
+        %svm_model = fitcsvm(train_dat, train_labs, input{:});
         
         classification = predict(svm_model, test_dat);
         

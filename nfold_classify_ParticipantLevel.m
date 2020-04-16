@@ -83,8 +83,15 @@ end
 mcpa_struct = MCP_to_MCPA(MCP_struct,...
     p.Results.incl_subjects,...
     p.Results.incl_features,...
+    p.Results.incl_channels,...
     p.Results.time_window,...
-    p.Results.baseline_window);
+    p.Results.baseline_window,...
+    p.Results.oxy_or_deoxy);
+
+% Subset patterns by session
+inds = repmat({':'},1,ndims(mcpa_struct.patterns)); % Create index structure with all-elements in all-dimensions
+inds{strcmp(mcpa_struct.dimensions,'session')} = p.Results.incl_sessions; % In whichever dimension matches 'session', substitute the incl_sessions vector
+mcpa_struct.patterns = mcpa_struct.patterns(inds{:}); % Replace patterns matrix with the subsetted sessions data
 
 %% summarize MCPA struct
 % Step 2: Apply the desired function (e.g., @nanmean) for summarizing time
@@ -119,7 +126,7 @@ else
     warning('final_dimensions not specified. Consulting recommend_dimensions.')
     
     [~, final_dimensions] = recommend_dimensions(p.Results, isWithinSubjects);
-   
+
     fprintf('The format the data will be in when it enters the classifier wrapper is: %s', final_dimensions{:});
     fprintf('\n')
 end
@@ -184,15 +191,15 @@ for s_idx = 1:n_subj
     % using RSA methods. Then classifier is trained/tested on the RSA
     % structures. This works for our previous MCPA studies, but might
     % not be appropriate for other classifiers (like SVM).
-       
+
     [group_data, group_labels, subj_data, subj_labels] = split_test_and_train(s_idx,...
         p.Results.conditions,...
         mcpa_summ.patterns,...
         mcpa_summ.event_types,...
         final_dimensions,...
         mcpa_summ.dimensions, [], []);
-        
-      
+
+    
     %% Run classifier and compare output with correct labels
     for set_idx = 1:min(n_sets,p.Results.max_sets)
         %% Progress reporting bit (not important to function. just sanity)
@@ -205,6 +212,7 @@ for s_idx = 1:n_subj
         end
         % Select the features for this subset
         set_features = sets(set_idx,:);
+        
 
         %% classify
         % call differently based on if we do RSA or not
@@ -220,12 +228,12 @@ for s_idx = 1:n_subj
         % RSA
         if strcmp(func2str(p.Results.test_handle),'rsa_classify')
             [test_labels, comparisons] = p.Results.test_handle(...
-                group_data(:,set_features,:), ...
+                group_data(:,set_features,:,:), ...
                 group_labels,...
                 subj_data(:,set_features,:),...
                 subj_labels,...
                 p.Results.opts_struct);
-
+            
         else
             [test_labels, comparisons] = p.Results.test_handle(...
                 group_data(:,set_features), ...
@@ -234,18 +242,26 @@ for s_idx = 1:n_subj
                 subj_labels,...
                 p.Results.opts_struct);
         end
-           
-       %% Record results .
+        %% Record results .
         if size(test_labels,2) > 1 % test labels will be a column vector if we don't do pairwise
-            if s_idx==1 && set_idx == 1, allsubj_results.accuracy_matrix = nan(n_cond,n_cond,min(n_sets,p.Results.max_sets),n_subj); end
+            if s_idx==1 && set_idx == 1, allsubj_results.accuracy_matrix = nan(8,8,min(n_sets,p.Results.max_sets),n_subj); end
 
-            if iscell(comparisons)
+            % if not nans, see how comparisons is saved. 
+            % If its a cell array, then we need to find where the values in that array correspond to the condition location in event_types
+            % Then find the subject accuracy
+            if iscell(comparisons) 
                 subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
+                nan_idx = cellfun(@(x) any(isnan(x)), test_labels(:,1,:), 'UniformOutput', false);
+                subj_acc(:,:,[nan_idx{1,:,:}]) = nan;
+
                 comparisons = cellfun(@(x) find(strcmp(x,mcpa_summ.event_types)),comparisons);
-            else  
+            else
                 subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
+                nan_idx = cellfun(@(x) any(isnan(x)), test_labels(:,1,:), 'UniformOutput', false);
+                subj_acc(:,:,[nan_idx{1,:,:}]) = nan;
             end
-
+          
+            % Then loop through comparisons and save accuracy to the results struct
             for comp = 1:size(comparisons,1)
                 if size(comparisons,2)==1
                     allsubj_results.accuracy_matrix(comparisons(comp,1),:,set_idx,s_idx) = subj_acc(comp);
@@ -256,10 +272,10 @@ for s_idx = 1:n_subj
         else
             for cond_idx = 1:n_cond
                 temp_acc = cellfun(@strcmp,...
-                subj_labels(strcmp(strjoin(string(p.Results.conditions{cond_idx}),'+'),subj_labels)),... % known labels
-                test_labels(strcmp(strjoin(string(p.Results.conditions{cond_idx}),'+'),subj_labels))...% classifier labels
-                );
-
+                    subj_labels(strcmp(strjoin(string(p.Results.conditions{cond_idx}),'+'),subj_labels)),... % known labels
+                    test_labels(strcmp(strjoin(string(p.Results.conditions{cond_idx}),'+'),subj_labels))...% classifier labels
+                    );
+                
                 temp_set_results_cond(cond_idx,set_idx,set_features) = nanmean(temp_acc);
             end
             for cond_idx = 1:n_cond
@@ -267,7 +283,7 @@ for s_idx = 1:n_subj
                 allsubj_results.accuracy(cond_idx).subjXfeature(s_idx,:) = nanmean(temp_set_results_cond(cond_idx,:,:),2);
             end
         end
-                  
+        
         %% Progress reporting
         if p.Results.verbose
             fprintf(' %0.1f mins\n',toc/60);
@@ -298,8 +314,5 @@ if p.Results.verbose
         
     end
 end
-
-
-
 
 end

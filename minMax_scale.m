@@ -1,7 +1,7 @@
 function scaled_full_set = minMax_scale(full_dataset, input_struct)
 %% This function scales data to a set minimum and maximum
 % Arguments: 
-% full_dataset: Either input a full Oxy dataset from one participant if you
+% full_dataset: Either input a full Oxy or Deoxy dataset from one participant if you
 % want to scale individual subject data or enter this as [] if you want to
 % scale group level data
 % testing_data: Either input the testing data (after we split test and
