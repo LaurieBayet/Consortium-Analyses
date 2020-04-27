@@ -244,7 +244,7 @@ for s_idx = 1:n_subj
         end
         %% Record results .
         if size(test_labels,2) > 1 % test labels will be a column vector if we don't do pairwise
-            if s_idx==1 && set_idx == 1, allsubj_results.accuracy_matrix = nan(n_cond,n_cond,min(n_sets,p.Results.max_sets),n_subj); end
+            if s_idx==1 && set_idx == 1, allsubj_results.accuracy_matrix = nan(8,8,min(n_sets,p.Results.max_sets),n_subj); end
 
             % if not nans, see how comparisons is saved. 
             % If its a cell array, then we need to find where the values in that array correspond to the condition location in event_types
