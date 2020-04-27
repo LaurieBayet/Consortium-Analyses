@@ -120,40 +120,42 @@ for s_idx = 1:n_subj
                     results_struct.opts_struct);
             end
 
+
+            
             %% Record results 
+                
+                if size(test_labels,2) > 1 % test labels will be a column vector if we don't do pairwise
+                    if s_idx==1 && set_idx == 1 && folding_idx == 1, allsubj_results.accuracy_matrix = nan(n_cond,n_cond,min(n_sets,results_struct.max_sets),n_sessions,n_subj); end
 
-            if size(test_labels,2) > 1 % test labels will be a column vector if we don't do pairwise
-                if s_idx==1 && set_idx == 1 && folding_idx == 1, allsubj_results.accuracy_matrix = nan(n_cond,n_cond,min(n_sets,results_struct.max_sets),n_sessions,n_subj); end
-
-                if iscell(comparisons)
-                    subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
-                    comparisons = cellfun(@(x) find(strcmp(x,results_struct.event_types)),comparisons); 
-                else
-                    subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
-                end
-
-                for comp = 1:size(comparisons,1)
-                    if size(comparisons,2)==1
-                        allsubj_results.accuracy_matrix(comparisons(comp,1),:,set_idx,folding_idx,s_idx) = subj_acc(comp);
+                    if iscell(comparisons)
+                        subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
+                        comparisons = cellfun(@(x) find(strcmp(x,results_struct.event_types)),comparisons); 
                     else
-                        allsubj_results.accuracy_matrix(comparisons(comp,1),comparisons(comp,2),set_idx,folding_idx,s_idx) = subj_acc(comp);
+                        subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
+                    end
+
+                    for comp = 1:size(comparisons,1)
+                        if size(comparisons,2)==1
+                            allsubj_results.accuracy_matrix(comparisons(comp,1),:,set_idx,folding_idx,s_idx) = subj_acc(comp);
+                        else
+                            allsubj_results.accuracy_matrix(comparisons(comp,1),comparisons(comp,2),set_idx,folding_idx,s_idx) = subj_acc(comp);
+                        end
+                    end
+                else
+                    for cond_idx = 1:n_cond
+                        temp_acc = cellfun(@strcmp,...
+                        subj_labels(strcmp(strjoin(string(results_struct.conditions{cond_idx}),'+'),subj_labels)),... % known labels
+                        test_labels(strcmp(strjoin(string(results_struct.conditions{cond_idx}),'+'),subj_labels))...% classifier labels
+                        );
+                    
+                        temp_set_results_cond(cond_idx,set_idx,set_features) = nanmean(temp_acc);
+                    end
+                    for cond_idx = 1:n_cond
+                        allsubj_results.accuracy(cond_idx).subsetXsubj(:,s_idx) = nanmean(temp_set_results_cond(cond_idx,:,:),3);
+                        allsubj_results.accuracy(cond_idx).subjXfeature(s_idx,:) = nanmean(temp_set_results_cond(cond_idx,:,:),2);
+                        allsubj_results.accuracy(cond_idx).subjXsession(s_idx,folding_idx) = nanmean(temp_set_results_cond(cond_idx,:,:),3);
                     end
                 end
-            else
-                for cond_idx = 1:n_cond
-                    temp_acc = cellfun(@strcmp,...
-                    subj_labels(strcmp(strjoin(string(results_struct.conditions{cond_idx}),'+'),subj_labels)),... % known labels
-                    temp_test_labels(strcmp(strjoin(string(results_struct.conditions{cond_idx}),'+'),subj_labels))...% classifier labels
-                    );
-
-                    temp_set_results_cond(cond_idx,set_idx,set_features) = nanmean(temp_acc);
-                end
-                for cond_idx = 1:n_cond
-                    allsubj_results.accuracy(cond_idx).subsetXsubj(:,s_idx) = nanmean(temp_set_results_cond(cond_idx,:,:),3);
-                    allsubj_results.accuracy(cond_idx).subjXfeature(s_idx,:) = nanmean(temp_set_results_cond(cond_idx,:,:),2);
-                    allsubj_results.accuracy(cond_idx).subjXsession(s_idx,folding_idx) = nanmean(temp_set_results_cond(cond_idx,:,:),3);
-                end
-            end
 
         end % end set_idx
     %% Progress reporting
@@ -166,6 +168,4 @@ end % end subject loop
 
 
 end % end function
-            
-
             
