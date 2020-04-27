@@ -1,6 +1,6 @@
 
 
-function p = significance_test(results_struct, n_iter, test_type)
+function [p, distribution, test_acc, acc] = significance_test(results_struct, n_iter, test_type)
 %% find the significance of decoding accuracy
 % takes in the results struct from folding wrappers and performs a
 % permutation test to find the p value for our classification accuracy 
@@ -13,20 +13,24 @@ end
 %% find accuracy for the results struct
 
 
-if isfield(results_struct, 'accuracy_matrix')       
-    results_struct_participant_accuracy = [];
-    for sub = 1:results_struct.incl_subj
-        results_struct_participant_accuracy = [results_struct_participant_accuracy nanmean(nanmean(results_struct.accuracy_matrix(:,:,sub)))];
+if isfield(results_struct, 'accuracy_matrix')
+    
+    if ~isempty(strfind(results_struct.test_type, 'Participant'))
+        acc = nanmean(results_struct.accuracy_matrix,4);
+        test_acc = nanmean(acc(:));
+    else
+        acc = nanmean(results_struct.accuracy_matrix,4);
+        acc = nanmean(acc,5);
+        test_acc = nanmean(acc(:));
     end
-    result_struct_accuracy = mean(results_struct_participant_accuracy);
 else
-    result_struct_accuracy = mean([mean(results_struct.accuracy(1).subsetXsubj) mean(results_struct.accuracy(2).subsetXsubj)]);
+    test_acc = mean([mean(results_struct.accuracy(1).subsetXsubj) mean(results_struct.accuracy(2).subsetXsubj)]);
 end
 
 
 
 %% find accuracy distribution
-iter_accuracy = [];
+distribution = [];
 for iter = 1:n_iter
     
     % do classification
@@ -34,25 +38,30 @@ for iter = 1:n_iter
     
     % get classification accuracy 
     if length(results_struct.conditions) == 2 % if we gave two conditions
-        accuracy = mean([mean(iter_results.accuracy(1).subsetXsubj) mean(iter_results.accuracy(2).subsetXsubj)]);
-    else % if we have more than 2 conditions (will have results matrix rather than vector)
-        participant_accuracy = [];
-        for sub = 1:results_struct.incl_subj
-            participant_accuracy = [participant_accuracy nanmean(nanmean(iter_results.accuracy_matrix(:,:,sub)))];
+        perm_accuracy = mean([mean(iter_results.accuracy(1).subsetXsubj) mean(iter_results.accuracy(2).subsetXsubj)]);
+    else % if we have more than 2 conditions (will have results matrix rather than vector)        
+        if ~isempty(strfind(results_struct.test_type, 'Participant'))
+            perm_acc = nanmean(results_struct.accuracy_matrix,4);
+            perm_accuracy = nanmean(acc(:));
+        else
+            perm_acc = nanmean(results_struct.accuracy_matrix,4);
+            perm_acc = nanmean(perm_acc,5);
+            perm_accuracy = nanmean(perm_acc(:));
         end
-        accuracy = mean(participant_accuracy);
+        
+        
     end
     
-    iter_accuracy = [iter_accuracy accuracy];
+    distribution = [distribution perm_accuracy];
 
 end
 
 %% calculate p
 
 if n_iter == factorial(length(results_struct.conditions))
-    p = sum(iter_accuracy >= result_struct_accuracy)/n_iter;
+    p = sum(distribution >= test_acc)/n_iter;
 else
-    p = (sum(iter_accuracy >= result_struct_accuracy) + 1)/(n_iter + 1);
+    p = (sum(distribution >= test_acc) + 1)/(n_iter + 1);
 end
 
 
