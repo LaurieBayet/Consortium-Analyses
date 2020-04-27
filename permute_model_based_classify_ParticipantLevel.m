@@ -62,7 +62,11 @@ for s_idx = 1:length(results_struct.incl_subjects)
         results_struct.event_types,...
         final_dimensions,...
         results_struct.dimensions, [], []);
-        
+    
+    %% permute the group labels
+    num_labels = length(group_labels);
+    permuted_idx = randperm(num_labels)';
+    group_labels = group_labels(permuted_idx);    
       
     %% Run classifier and compare output with correct labels
     for set_idx = 1:min(n_sets,results_struct.max_sets)
