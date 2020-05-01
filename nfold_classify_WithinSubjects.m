@@ -275,12 +275,17 @@ for s_idx = 1:n_subj
                 
                 if size(test_labels,2) > 1 % test labels will be a column vector if we don't do pairwise
                     if s_idx==1 && set_idx == 1 && folding_idx == 1, allsubj_results.accuracy_matrix = nan(n_cond,n_cond,min(n_sets,p.Results.max_sets),n_sessions,n_subj); end
-
-                    if iscell(comparisons)
+                    
+                    if iscell(comparisons) 
                         subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
-                        comparisons = cellfun(@(x) find(strcmp(x,mcpa_summ.event_types)),comparisons); 
+                        nan_idx = cellfun(@(x) any(isnan(x)), test_labels(:,1,:), 'UniformOutput', false);
+                        subj_acc(:,:,[nan_idx{1,:,:}]) = nan;
+
+                        comparisons = cellfun(@(x) find(strcmp(x,mcpa_summ.event_types)),comparisons);
                     else
                         subj_acc = nanmean(strcmp(test_labels(:,1,:), test_labels(:,2,:)));
+                        nan_idx = cellfun(@(x) any(isnan(x)), test_labels(:,1,:), 'UniformOutput', false);
+                        subj_acc(:,:,[nan_idx{1,:,:}]) = nan;
                     end
 
                     for comp = 1:size(comparisons,1)
