@@ -127,16 +127,26 @@ empty_y_vals_test = unique(empty_y_vals_test);
 cols = 1:size(model_data,2);
 rows = 1:size(model_data,1);
 
-if length(empty_x_vals_model) == size(model_data,1) && length(empty_y_vals_model) ~= size(model_data,2)
-    % remove columns
-    remove_cols = union(empty_y_vals_model, empty_y_vals_test);
-    keep = ~ismember(cols, remove_cols);
-    model_dat = model_dat(:,keep', :,:);
-    test_dat = test_dat(:, keep', :,:);   
-elseif length(empty_x_vals_model) == size(model_data,1) && length(empty_y_vals_model) == size(model_data,2)
-    % this is an empty session
-    warning('There is no data in this session')
+if size(model_data,2) > 8
+    if length(empty_x_vals_model) == size(model_data,1) && length(empty_y_vals_model) ~= size(model_data,2)
+        % remove columns
+        remove_cols = union(empty_y_vals_model, empty_y_vals_test);
+        keep = ~ismember(cols, remove_cols);
+        model_dat = model_dat(:,keep', :,:);
+        test_dat = test_dat(:, keep', :,:);   
+    elseif length(empty_x_vals_model) == size(model_data,1) && length(empty_y_vals_model) == size(model_data,2)
+        % this is an empty session
+        warning('There is no data in this session')
+    end
+else
+    if length(empty_x_vals_test) == size(model_data,1) && length(empty_y_vals_test) ~= size(test_data,2)
+        test_cols = 1:size(test_dat,2);
+        remove_cols = union(empty_y_vals_model, empty_y_vals_test);
+        keep = ~ismember(test_cols, remove_cols);
+        test_dat = test_dat(:, keep', :,:);
+    end 
 end
+    
     
 
 
@@ -163,16 +173,19 @@ if opts.similarity_space % create similarity structures
     else
         training_matrix = model_dat;
     end
-    
-    % then repeat to create test data
-    test_mat = nan(size(test_dat,1),size(test_dat,1),size(test_dat,3),size(test_dat,4));
-    for i = 1: (size(test_dat,3)*size(test_dat,4))
-        test_mat(:,:,i) = corr(test_dat(:,:,i)', 'type', opts.metric);
+    try
+        % then repeat to create test data
+        test_mat = nan(size(test_dat,1),size(test_dat,1),size(test_dat,3),size(test_dat,4));
+        for i = 1: (size(test_dat,3)*size(test_dat,4))
+            test_mat(:,:,i) = corr(test_dat(:,:,i)', 'type', opts.metric);
+        end
+        test_matrix = nanmean(test_mat,3);
+        test_matrix = nanmean(test_matrix,4);
+
+        test_matrix = atanh(test_matrix);
+    catch
+        model
     end
-    test_matrix = nanmean(test_mat,3);
-    test_matrix = nanmean(test_matrix,4);
-    
-    test_matrix = atanh(test_matrix);
    
 else % create dissimilarity structures
     
